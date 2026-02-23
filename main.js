@@ -25,8 +25,8 @@
     };
 
     Promise.all([
-        d3.csv("final_dataset_for_vis.csv"),
-        d3.csv("top_comments.csv").catch(() => []) 
+        d3.csv("dataset/final_dataset_for_vis.csv"),
+        d3.csv("dataset/top_comments.csv").catch(() => []) 
     ]).then(([marketData, commentData]) => {
         globalComments = commentData;
 
