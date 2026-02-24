@@ -244,99 +244,155 @@
             .style("z-index", 1000);
     }
 
-    // --- VIS 3: STREAMGRAPH (高对比度核心) ---
+    // --- VIS 3: STREAMGRAPH WITH SLIDING WINDOW & AUTO Y-SCALE ---
     function renderVis3(data) {
         const el = document.getElementById('vis3-main');
-        const w = el.clientWidth - margin.left - margin.right;
-        const h = el.clientHeight - margin.top - margin.bottom;
+        
+        // 1. 清空旧画布，防止重绘时图表重叠
+        d3.select("#vis3-main").selectAll("*").remove(); 
 
+        const totalW = el.clientWidth;
+        const totalH = el.clientHeight;
+
+        // 2. 重新划分高度：上方 Focus (主图) 占大头，下方 Context (滑动条) 占小头
+        const marginFocus = {top: 20, right: 30, bottom: 60, left: 60};
+        const marginContext = {top: totalH - 35, right: 30, bottom: 0, left: 60};
+        
+        const w = totalW - marginFocus.left - marginFocus.right;
+        const hFocus = totalH - marginFocus.top - marginFocus.bottom;
+        const hContext = totalH - marginContext.top - marginContext.bottom;
+
+        // 堆叠数据准备
         const keys = ["hype", "fear", "anger"];
         const stack = d3.stack().keys(keys).offset(d3.stackOffsetNone);
         const layers = stack(data);
 
-        const svg = d3.select("#vis3-main").append("svg").attr("width", w + margin.left + margin.right).attr("height", h + margin.top + margin.bottom)
-            .append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+        const svg = d3.select("#vis3-main").append("svg")
+            .attr("width", totalW).attr("height", totalH);
 
+        // 3. 建立剪裁蒙版 (Clip Path)：确保放大时图形不跑出坐标轴范围
+        svg.append("defs").append("clipPath").attr("id", "clip-vis3")
+            .append("rect").attr("width", w).attr("height", hFocus);
+
+        // 4. 设置双坐标系 (x/y 给主图, x2/y2 给底部滑块)
         const x = d3.scaleTime().domain(d3.extent(data, d => d.date)).range([0, w]);
-        const y = d3.scaleLinear().domain([0, d3.max(layers, l => d3.max(l, d => d[1]))]).range([h, 0]);
+        const x2 = d3.scaleTime().domain(x.domain()).range([0, w]); 
+        
+        // 初始全局 Y 轴最大值
+        const globalMaxY = d3.max(data, d => d.hype + d.fear + d.anger);
+        const y = d3.scaleLinear().domain([0, globalMaxY]).range([hFocus, 0]);
+        const y2 = d3.scaleLinear().domain([0, globalMaxY]).range([hContext, 0]); 
 
-        const area = d3.area().x(d => x(d.data.date)).y0(d => y(d[0])).y1(d => y(d[1])).curve(d3.curveBasis);
+        const xAxis = d3.axisBottom(x).tickFormat(d3.timeFormat("%b %d"));
+        const xAxis2 = d3.axisBottom(x2).tickFormat(d3.timeFormat("%m/%d"));
+        const yAxis = d3.axisLeft(y).ticks(5);
 
-        svg.selectAll("path").data(layers).enter().append("path")
-            .attr("d", area).attr("fill", d => getSentColor(d.key)).attr("opacity", 0.9)
-            .on("mousemove", (event) => {
-                const date = x.invert(d3.pointer(event)[0]);
-                updateComments(date);
-            });
-        // 修复重叠的 X 轴并倾斜文字
-        svg.append("g")
-            .attr("transform", `translate(0,${h})`)
-            .attr("class", "axis")
-            .call(d3.axisBottom(x).tickFormat(d3.timeFormat("%b %d")))
-            .selectAll("text")
-            .style("text-anchor", "end")
-            .attr("dx", "-.8em")
-            .attr("dy", ".15em")
-            .attr("transform", "rotate(-45)");
+        // 主图面积生成器与底图面积生成器
+        const area = d3.area().x(d => x(d.data.date)).y0(d => y(d[0])).y1(d => y(d[1])).curve(d3.curveMonotoneX);
+        const area2 = d3.area().x(d => x2(d.data.date)).y0(d => y2(d[0])).y1(d => y2(d[1])).curve(d3.curveMonotoneX);
 
-        // 补全缺失的 Y 轴和标题
-        svg.append("g").attr("class", "axis").call(d3.axisLeft(y).ticks(5));
-        svg.append("text")
-            .attr("transform", "rotate(-90)").attr("y", 0 - margin.left).attr("x", 0 - (h / 2))
-            .attr("dy", "1em").style("text-anchor", "middle").style("font-size", "12px").text("Total Reddit Posts");
-        const hoverLine = svg.append("line")
-            .attr("class", "hover-line").attr("y1", 0).attr("y2", h)
+        const focus = svg.append("g").attr("transform", `translate(${marginFocus.left},${marginFocus.top})`);
+        const context = svg.append("g").attr("transform", `translate(${marginContext.left},${marginContext.top})`);
+
+        // --- 绘制主图 (Focus) ---
+        // 注意这里套上了 clip-path
+        const streamPath = focus.append("g").attr("clip-path", "url(#clip-vis3)")
+            .selectAll("path.layer").data(layers).enter().append("path")
+            .attr("class", "layer")
+            .attr("d", area).attr("fill", d => getSentColor(d.key)).attr("opacity", 0.9);
+
+        const gX = focus.append("g").attr("transform", `translate(0,${hFocus})`).attr("class", "axis").call(xAxis);
+        gX.selectAll("text").style("text-anchor", "end").attr("dx", "-.8em").attr("dy", ".15em").attr("transform", "rotate(-45)");
+        
+        const gY = focus.append("g").attr("class", "axis").call(yAxis);
+        focus.append("text").attr("transform", "rotate(-90)").attr("y", -marginFocus.left + 15).attr("x", -(hFocus / 2))
+            .style("text-anchor", "middle").style("font-size", "12px").text("Total Reddit Posts");
+
+        // --- 工具提示与交互 (保留并修复你的原逻辑) ---
+        const hoverLine = focus.append("line").attr("class", "hover-line").attr("y1", 0).attr("y2", hFocus)
             .style("stroke", "#1a1a1a").style("stroke-width", "1.5px").style("stroke-dasharray", "4,4").style("opacity", 0);
 
         d3.select(".vis3-tooltip").remove();
         const tooltip3 = d3.select("body").append("div").attr("class", "vis3-tooltip")
             .style("position", "absolute").style("background", "rgba(255, 255, 255, 0.95)")
             .style("color", "#333").style("padding", "12px").style("border", "1px solid #dee2e6")
-            .style("border-radius", "8px").style("font-size", "13px")
-            .style("box-shadow", "0 4px 12px rgba(0,0,0,0.1)")
+            .style("border-radius", "8px").style("font-size", "13px").style("box-shadow", "0 4px 12px rgba(0,0,0,0.1)")
             .style("pointer-events", "none").style("opacity", 0).style("z-index", 1000);
 
         const bisectDate = d3.bisector(d => d.date).left;
 
-        svg.append("rect").attr("width", w).attr("height", h)
-            .style("fill", "none").style("pointer-events", "all")
+        focus.append("rect").attr("width", w).attr("height", hFocus).style("fill", "none").style("pointer-events", "all")
             .on("mouseover", () => { hoverLine.style("opacity", 1); tooltip3.style("opacity", 1); })
             .on("mouseout", () => { hoverLine.style("opacity", 0); tooltip3.style("opacity", 0); })
             .on("mousemove", function(event) {
                 const mouseX = d3.pointer(event)[0];
                 const x0 = x.invert(mouseX);
+                
+                // 确保鼠标悬停计算不会超出当前数据边界
                 const i = bisectDate(data, x0, 1);
-                const d0 = data[i - 1], d1 = data[i];
+                const d0 = data[i - 1];
+                const d1 = data[i];
                 if (!d0 || !d1) return;
                 const d = (x0 - d0.date > d1.date - x0) ? d1 : d0; 
 
                 const exactX = x(d.date);
-                hoverLine.attr("x1", exactX).attr("x2", exactX); 
-                updateComments(d.date); 
+                // 限制 hover 线和 tooltip 只能在可见区域显示
+                if (exactX >= 0 && exactX <= w) {
+                    hoverLine.attr("x1", exactX).attr("x2", exactX); 
+                    updateComments(d.date); 
 
-                const total = d.hype + d.fear + d.anger;
+                    const total = d.hype + d.fear + d.anger;
 
-                tooltip3.html(`
-                    <div style="margin-bottom:8px; border-bottom:1px solid #dee2e6; padding-bottom:5px; font-weight:bold; font-size:14px;">
-                        ${d3.timeFormat("%b %d, %Y")(d.date)}
-                    </div>
-                    <div style="display:flex; justify-content:space-between; width:150px;">
-                        <span><span style="color:${palette.Hype}; font-size:16px;">■</span> Hype:</span> <b>${d.hype}</b>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; width:150px;">
-                        <span><span style="color:${palette.Fear}; font-size:16px;">■</span> Fear:</span> <b>${d.fear}</b>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; width:150px;">
-                        <span><span style="color:${palette.Anger}; font-size:16px;">■</span> Anger:</span> <b>${d.anger}</b>
-                    </div>
-                    <div style="margin-top:8px; padding-top:5px; border-top:1px dashed #dee2e6; display:flex; justify-content:space-between; width:150px;">
-                        <span style="color:#6c757d;">Total Posts:</span> <b>${total}</b>
-                    </div>
-                `)
-                .style("left", (event.pageX + 20) + "px")
-                .style("top", (event.pageY - 60) + "px");
+                    tooltip3.html(`
+                        <div style="margin-bottom:8px; border-bottom:1px solid #dee2e6; padding-bottom:5px; font-weight:bold; font-size:14px;">
+                            ${d3.timeFormat("%b %d, %Y")(d.date)}
+                        </div>
+                        <div style="display:flex; justify-content:space-between; width:150px;">
+                            <span><span style="color:${palette.Hype}; font-size:16px;">■</span> Hype:</span> <b>${d.hype}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; width:150px;">
+                            <span><span style="color:${palette.Fear}; font-size:16px;">■</span> Fear:</span> <b>${d.fear}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; width:150px;">
+                            <span><span style="color:${palette.Anger}; font-size:16px;">■</span> Anger:</span> <b>${d.anger}</b>
+                        </div>
+                        <div style="margin-top:8px; padding-top:5px; border-top:1px dashed #dee2e6; display:flex; justify-content:space-between; width:150px;">
+                            <span style="color:#6c757d;">Total Posts:</span> <b>${total}</b>
+                        </div>
+                    `)
+                    .style("left", (event.pageX + 20) + "px")
+                    .style("top", (event.pageY - 60) + "px");
+                }
             });
 
+        // --- 绘制底部迷你滑动图 (Context) ---
+        context.selectAll("path.layer2").data(layers).enter().append("path")
+            .attr("class", "layer2").attr("d", area2).attr("fill", d => getSentColor(d.key)).attr("opacity", 0.3);
+        
+        context.append("g").attr("transform", `translate(0,${hContext})`).attr("class", "axis").call(xAxis2);
+        
+        const brush = d3.brushX().extent([[0, 0], [w, hContext]]).on("brush", brushed);
+        context.append("g").attr("class", "brush").call(brush).call(brush.move, x.range());
+
+        // --- 🌟 核心逻辑：拖动滑块时，动态调整主图的 Y 轴高度 ---
+        function brushed(event) {
+            const selection = event.selection || x2.range();
+            x.domain(selection.map(x2.invert, x2)); // 更新主图 X 轴范围
+            
+            // 筛选出当前可视日期范围内的数据
+            const visibleData = data.filter(d => d.date >= x.domain()[0] && d.date <= x.domain()[1]);
+            
+            // 计算当前可视范围内的最大总数量 (避免全是 0 的情况，保底给个 10)
+            const currentMaxY = d3.max(visibleData, d => d.hype + d.fear + d.anger) || 10;
+            
+            // 更新主图的 Y 轴 (留出 5% 的顶部空间避免图形贴顶)
+            y.domain([0, currentMaxY * 1.05]); 
+
+            // 重新渲染路径和坐标轴
+            streamPath.attr("d", area);
+            gX.call(xAxis).selectAll("text").style("text-anchor", "end").attr("dx", "-.8em").attr("dy", ".15em").attr("transform", "rotate(-45)");
+            gY.call(yAxis);
+        }
     }
 
     // --- 🎬 VIS 5: ALIGNER  ---
