@@ -15,10 +15,10 @@ except FileNotFoundError:
 hover_text = df['date'].apply(lambda x: f"<b>Date: {x}</b>")
 
 # 3. Calculate the 90th percentile for volatility to cap the color scale
-# This prevents extreme outliers from washing out the color gradient for the rest of the high-risk days
 color_max_limit = df['volatility'].quantile(0.90)
 
 # 4. Create the Scatter Plot Matrix (SPLOM)
+# 这里定义了 fig，所以后面的导出代码才能认出它！
 fig = go.Figure(data=go.Splom(
     dimensions=[
         dict(label='<b>Fear Sentiment</b>', values=df['fear_ratio']),
@@ -27,27 +27,19 @@ fig = go.Figure(data=go.Splom(
         dict(label='<b>Trading Volume</b>', values=df['volume']),
         dict(label='<b>Market Risk</b><br>(Volatility)', values=df['volatility'])
     ],
-    
-    # Bind the hover text to the chart
     text=hover_text,
     hovertemplate="%{text}<br>X: %{x}<br>Y: %{y}<extra></extra>",
-    
-    # Adjust marker styling and color logic
     marker=dict(
         color=df['volatility'],    
         colorscale='Reds',     
         showscale=True,
-        
-        # Apply the color cap to ensure clear color clustering
         cmax=color_max_limit, 
         cmin=df['volatility'].min(),
-        
         colorbar=dict(title="Market Risk<br>(Volatility)", thickness=15),
         size=7,                    
         opacity=0.7,               
         line=dict(width=0.5, color='white') 
     ),
-    # Hide the diagonal plots as self-correlation is meaningless
     diagonal=dict(visible=False)
 ))
 
@@ -71,7 +63,25 @@ for i in range(1, 6):
     fig.update_layout(**{f'xaxis{i}': dict(showgrid=True, gridcolor='#f0f0f0', zeroline=False, tickfont=dict(size=10))})
     fig.update_layout(**{f'yaxis{i}': dict(showgrid=True, gridcolor='#f0f0f0', zeroline=False, tickfont=dict(size=10))})
 
-# 7. Export to HTML
+# 7. Export to HTML (这一步必须放在最最最底下)
 output_file = "vis4_splom_final.html"
-fig.write_html(output_file)
-print(f"✅ Interactive SPLOM chart generated successfully: {output_file}")
+
+# --- 注入给 HTML 大屏通信的 JS 脚本 ---
+post_js = """
+console.log("✅ Vis4 iframe 内部交互脚本已成功挂载！");
+var graph = document.getElementsByClassName('plotly-graph-div')[0];
+graph.on('plotly_hover', function(data){
+    var pt = data.points[0];
+    if (pt.text) {
+        var match = pt.text.match(/Date: (\\d{4}-\\d{2}-\\d{2})/);
+        if (match) {
+            console.log("🖱️ Vis4 探测到鼠标悬停，正则抓取到日期:", match[1]);
+            window.parent.postMessage({ type: 'plotly_hover', date: match[1] }, '*');
+        }
+    }
+});
+"""
+
+# 真正保存 HTML 的指令，带上刚才写的 post_js
+fig.write_html(output_file, post_script=post_js)
+print(f"✅ Interactive SPLOM chart generated successfully with Hover Sync: {output_file}")

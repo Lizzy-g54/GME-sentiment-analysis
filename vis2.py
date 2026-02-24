@@ -38,7 +38,8 @@ temp_fig = px.scatter(
     animation_frame='date_str', animation_group='stock_id', 
     size='volume', color='fear_ratio',
     color_continuous_scale='Reds', range_color=[fear_min, fear_max],  
-    size_max=50, opacity=0.85
+    size_max=50, opacity=0.85,
+    custom_data=['date_str'] # 🌟【关键修改1】：给每个气泡绑定日期数据，方便后续 JavaScript 抓取
 )
 
 # 4. 轻量化累积轨迹 (单层架构，最防跳)
@@ -150,5 +151,27 @@ fig.update_layout(
     margin=dict(l=80, r=80, t=100, b=80), showlegend=False
 )
 
-fig.write_html("vis2_market_spiral_perfect.html")
-print("✅ 完美版生成！播放变平缓了，残影变成了真正的渐变消失，所有图例和数值也清晰可见了！")
+# 🌟【关键修改2】：注入给 HTML 大屏通信的 JS 脚本
+post_js = """
+console.log("✅ Vis2 iframe 内部交互脚本已成功挂载！");
+var graph = document.getElementsByClassName('plotly-graph-div')[0];
+graph.on('plotly_hover', function(data){
+    var pt = data.points[0];
+    
+    // 增强兼容性：有时 customdata 是数组，有时是纯字符串
+    var dateStr = null;
+    if(pt.customdata) {
+        dateStr = Array.isArray(pt.customdata) ? pt.customdata[0] : pt.customdata;
+    }
+    
+    console.log("🖱️ Vis2 探测到鼠标悬停，提取到日期:", dateStr);
+    
+    if(dateStr) {
+        window.parent.postMessage({ type: 'plotly_hover', date: dateStr }, '*');
+    }
+});
+"""
+
+# 最后一步：生成带有注入脚本的 HTML
+fig.write_html("vis2_market_spiral_perfect.html", post_script=post_js)
+print("✅ Vis 2 完美版生成！已加上与主屏幕联动的 Hover 传值功能！")

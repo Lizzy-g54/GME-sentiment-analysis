@@ -24,6 +24,17 @@
         return palette[key] || "#dee2e6";
     };
 
+    window.addEventListener("message", function(event) {
+        // 确保收到的是来自 Plotly 的 hover 消息，并且包含了 date
+        if (event.data && event.data.type === 'plotly_hover' && event.data.date) {
+            const parseTime = d3.timeParse("%Y-%m-%d");
+            const dateObj = parseTime(event.data.date);
+            if (dateObj) {
+                updateComments(dateObj); // 触发你原有的右侧评论更新逻辑
+            }
+        }
+    });
+
     Promise.all([
         d3.csv("dataset/final_dataset_for_vis.csv"),
         d3.csv("dataset/top_comments.csv").catch(() => []) 
