@@ -67,8 +67,13 @@
             </header>
 
             <div class="chart-card">
-                <h5>Vis 1: Emotional Candlestick</h5>
-                <div id="vis1" style="height: 350px;"></div>
+                <h5>Vis 1: Sentiment Flow (High Contrast)</h5>
+                <div id="vis3-main" style="height: 300px;"></div>
+                <div class="d-flex justify-content-center gap-3 mt-2 small fw-bold">
+                    <span><i style="background:#007bff; width:12px; height:12px; display:inline-block;"></i> Hype</span>
+                    <span><i style="background:#ff9f1c; width:12px; height:12px; display:inline-block;"></i> Fear</span>
+                    <span><i style="background:#d63031; width:12px; height:12px; display:inline-block;"></i> Anger</span>
+                </div>
             </div>
 
             <div class="chart-card">
@@ -80,25 +85,12 @@
             </div>
 
             <div class="chart-card">
-                <h5>Vis 3: Sentiment Flow (High Contrast)</h5>
-                <div id="vis3-main" style="height: 300px;"></div>
-                <div class="d-flex justify-content-center gap-3 mt-2 small fw-bold">
-                    <span><i style="background:#007bff; width:12px; height:12px; display:inline-block;"></i> Hype</span>
-                    <span><i style="background:#ff9f1c; width:12px; height:12px; display:inline-block;"></i> Fear</span>
-                    <span><i style="background:#d63031; width:12px; height:12px; display:inline-block;"></i> Anger</span>
-                </div>
+                <h5>Vis 3: Emotional Candlestick</h5>
+                <div id="vis1" style="height: 350px;"></div>
             </div>
 
             <div class="chart-card">
-                <h5>Vis 4: Multi-dimensional Risk Correlation</h5>
-                <p class="text-muted small">Interactive matrix exploring the inner-links between Reddit attention and market volatility.</p>
-                <iframe src="vis4_splom_final.html" 
-                        style="width: 100%; height: 900px; border: none; border-radius: 4px;">
-                </iframe>
-            </div>
-
-            <div class="chart-card">
-                <h5>Vis 5: Predictive Aligner</h5>
+                <h5>Vis 4: Predictive Aligner</h5>
                 <div class="row align-items-center mb-3">
                     <div class="col-md-5"><span class="small fw-bold">Time Offset: <span id="shiftLabel" class="badge bg-primary fs-6">0</span> Days</span></div>
                     <div class="col-md-7"><input type="range" id="shiftSlider" min="-5" max="5" value="0" step="1"></div>
@@ -107,16 +99,22 @@
             </div>
 
             <div class="chart-card">
-                <h5>Vis 6: Daily Risk Fingerprint</h5>
+                <h5>Vis 5: Daily Risk Fingerprint</h5>
                 <p class="text-muted small">Daily sentiment footprint. Slide back the timeline to filter out explosive days and reveal hidden normal trends.</p>
                 <iframe src="vis6_fingerprint.html" 
                         style="width: 100%; height: 650px; border: none; border-radius: 4px;">
                 </iframe>
             </div>
             
-        </div>
+            <div class="chart-card">
+                <h5>Vis 6: Multi-dimensional Risk Correlation</h5>
+                <p class="text-muted small">Interactive matrix exploring the inner-links between Reddit attention and market volatility.</p>
+                <iframe src="vis4_splom_final.html" 
+                        style="width: 100%; height: 900px; border: none; border-radius: 4px;">
+                </iframe>
+            </div>
 
-        <div class="col-lg-4">
+        </div> <div class="col-lg-4">
             <div class="comment-panel">
                 <h5 class="text-uppercase border-bottom pb-2">Top Reddit Signals</h5>
                 <div id="selected-date-display" class="my-3 text-date">Select Date...</div>
@@ -125,8 +123,7 @@
                 </div>
             </div>
         </div>
-    </div>
-</div>
+
 <script src="main.js"></script>
 </body>
 </html>
